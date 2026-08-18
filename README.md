@@ -48,6 +48,22 @@ ls /dev/rtc0          # should exist
 cat /sys/class/rtc/rtc0/name  # should show: rtc-ds1307 1-0068
 ```
 
+**4. Allow sudo python3 without password prompt**
+
+This is required so the RTC sync works automatically without asking for a password:
+
+```bash
+sudo visudo
+```
+
+Add this line at the **end** of the file (replace `admin` with your username if different):
+
+```
+admin ALL=(ALL) NOPASSWD: /usr/bin/python3
+```
+
+Save with `Ctrl+X`, `Y`, `Enter`.
+
 ### Write system time to RTC
 
 Run this after setting the correct system time:
@@ -169,6 +185,22 @@ sudo reboot
 ls /dev/rtc0
 cat /sys/class/rtc/rtc0/name  # powinno pokazać: rtc-ds1307 1-0068
 ```
+
+**4. Zezwól na sudo python3 bez hasła**
+
+Wymagane żeby synchronizacja RTC działała automatycznie bez pytania o hasło:
+
+```bash
+sudo visudo
+```
+
+Dopisz na **końcu** pliku (zamień `admin` na swoją nazwę użytkownika jeśli inna):
+
+```
+admin ALL=(ALL) NOPASSWD: /usr/bin/python3
+```
+
+Zapisz przez `Ctrl+X`, `Y`, `Enter`.
 
 ### Zapis czasu systemowego do RTC
 
