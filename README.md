@@ -82,8 +82,6 @@ print("Time written to RTC")
 PYEOF
 ```
 
-> RTC always stores UTC. Your system timezone is applied automatically.
-
 ### Read RTC and set system time
 
 ```bash
@@ -219,8 +217,6 @@ with open("/dev/rtc0", "wb") as f:
 print("Zapisano czas do RTC")
 PYEOF
 ```
-
-> RTC zawsze przechowuje czas UTC. Strefa czasowa jest dodawana przez system automatycznie.
 
 ### Odczyt z RTC i ustawienie czasu systemowego
 
