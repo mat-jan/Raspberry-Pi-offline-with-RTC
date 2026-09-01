@@ -1,6 +1,5 @@
-# Raspberry-Pi-offline-with-RTC
-
-# DS3231 RTC on Raspberry Pi (no hwclock) / DS3231 RTC na Raspberry Pi (bez hwclock)
+# DS3231 RTC on Raspberry Pi Zero WH (no hwclock)
+# DS3231 RTC na Raspberry Pi Zero WH (bez hwclock)
 
 ---
 
@@ -8,55 +7,77 @@
 
 ### The problem
 
-Some Raspberry Pi models (especially Zero WH running lightweight Raspbian) don't have `hwclock` installed, even though the `util-linux` package is present. This makes the standard DS3231 setup guides fail.
+Raspberry Pi Zero WH has no onboard RTC and no `hwclock` installed, even though the `util-linux` package is present. This makes standard DS3231 setup guides fail.
 
 This guide shows how to read/write the DS3231 RTC using Python and `ioctl` directly — no extra packages needed, works fully offline.
 
+---
+
 ### Hardware
 
-- Raspberry Pi (tested on Zero WH)
+- Raspberry Pi Zero WH (tested on kernel 6.18.34+rpt-rpi-v6, Raspbian Bookworm)
 - DS3231 RTC module
 - CR2032 battery (insert **plus side up**)
 
 **Wiring:**
-```
-DS3231    →    Raspberry Pi
-VCC       →    Pin 1  (3.3V)
-GND       →    Pin 6  (GND)
-SDA       →    Pin 3  (GPIO2)
-SCL       →    Pin 5  (GPIO3)
-SQW, 32K  →    not connected
-```
+
+| DS3231 | Raspberry Pi |
+|--------|-------------|
+| VCC    | Pin 1 (3.3V) |
+| GND    | Pin 6 (GND) |
+| SDA    | Pin 3 (GPIO2) |
+| SCL    | Pin 5 (GPIO3) |
+| SQW, 32K | not connected |
+
+---
 
 ### Setup
 
-**1. Enable I2C:**
+#### 1. Enable I2C
+
 ```bash
 sudo raspi-config
 # Interface Options → I2C → Yes
 ```
 
-**2. Add DS3231 overlay:**
+#### 2. Add DS3231 overlay
+
 ```bash
 echo "dtoverlay=i2c-rtc,ds3231" | sudo tee -a /boot/firmware/config.txt
 sudo reboot
 ```
 
-**3. Verify RTC is detected:**
+#### 3. Verify RTC is detected
+
 ```bash
-ls /dev/rtc0          # should exist
+ls /dev/rtc0
 cat /sys/class/rtc/rtc0/name  # should show: rtc-ds1307 1-0068
 ```
 
-**4. Allow sudo python3 without password prompt**
+#### 4. Set timezone
 
-This is required so the RTC sync works automatically without asking for a password:
+```bash
+sudo timedatectl set-timezone Europe/Warsaw
+```
+
+Verify:
+
+```bash
+timedatectl
+# Time zone: Europe/Warsaw (CEST, +0200)
+```
+
+> **Note:** The RTC always stores time in UTC internally. The system converts to local time automatically based on the timezone setting. This is correct behaviour — do not store local time in RTC.
+
+#### 5. Allow sudo python3 without password prompt
+
+Required so the RTC sync service works automatically on boot:
 
 ```bash
 sudo visudo
 ```
 
-Add this line at the **end** of the file (replace `admin` with your username if different):
+Add this line at the end of the file (replace `admin` with your username if different):
 
 ```
 admin ALL=(ALL) NOPASSWD: /usr/bin/python3
@@ -64,9 +85,25 @@ admin ALL=(ALL) NOPASSWD: /usr/bin/python3
 
 Save with `Ctrl+X`, `Y`, `Enter`.
 
+---
+
+### Syncing time from Mac to Pi (when internet is available)
+
+When the Pi is connected to your local network, run this script on your Mac to push the current time to the Pi:
+
+```bash
+./sync_time.sh
+```
+
+The script connects via SSH, sets the system time, then writes it to the RTC so it persists after reboot.
+
+> Run this whenever you connect the Pi to your network, to keep the RTC accurate.
+
+---
+
 ### Write system time to RTC
 
-Run this after setting the correct system time:
+Run this after setting the correct system time (e.g. after running `sync_time.sh`):
 
 ```bash
 sudo python3 - << 'PYEOF'
@@ -82,7 +119,11 @@ print("Time written to RTC")
 PYEOF
 ```
 
+---
+
 ### Read RTC and set system time
+
+Run manually to verify, or use the systemd service below for automatic boot sync:
 
 ```bash
 sudo python3 - << 'PYEOF'
@@ -98,9 +139,15 @@ subprocess.run(["date", "-u", "-s", t])
 PYEOF
 ```
 
+---
+
 ### Auto-sync on boot (systemd)
 
 Create `/etc/systemd/system/rtc-sync.service`:
+
+```bash
+sudo nano /etc/systemd/system/rtc-sync.service
+```
 
 ```ini
 [Unit]
@@ -124,19 +171,25 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ```
 
-Enable it:
+Enable and start:
+
 ```bash
 sudo systemctl enable rtc-sync
 sudo systemctl start rtc-sync
 ```
 
+---
+
 ### Verify
 
 ```bash
-cat /sys/class/rtc/rtc0/time   # UTC time in RTC
-cat /sys/class/rtc/rtc0/date   # date in RTC
-date                            # system local time
+cat /sys/class/rtc/rtc0/time   # UTC time stored in RTC
+cat /sys/class/rtc/rtc0/date   # date stored in RTC
+date                            # system local time (converted by timezone)
+timedatectl                     # full time status overview
 ```
+
+---
 
 ---
 
@@ -144,55 +197,77 @@ date                            # system local time
 
 ### Problem
 
-Na niektórych modelach Raspberry Pi (szczególnie Zero WH z lekkim Raspbianem) polecenie `hwclock` nie jest dostępne, mimo że pakiet `util-linux` jest zainstalowany. Przez to standardowe poradniki konfiguracji DS3231 nie działają.
+Raspberry Pi Zero WH nie ma wbudowanego zegara RTC ani polecenia `hwclock`, mimo że pakiet `util-linux` jest zainstalowany. Przez to standardowe poradniki konfiguracji DS3231 nie działają.
 
 Ten poradnik pokazuje jak odczytywać i zapisywać czas do DS3231 przez Pythona i `ioctl` — bez dodatkowych pakietów, działa w pełni offline.
 
+---
+
 ### Sprzęt
 
-- Raspberry Pi (testowane na Zero WH)
+- Raspberry Pi Zero WH (testowane na kernelu 6.18.34+rpt-rpi-v6, Raspbian Bookworm)
 - Moduł RTC DS3231
 - Bateria CR2032 (włożyć **plusem do góry**)
 
 **Podłączenie:**
-```
-DS3231    →    Raspberry Pi
-VCC       →    Pin 1  (3.3V)
-GND       →    Pin 6  (GND)
-SDA       →    Pin 3  (GPIO2)
-SCL       →    Pin 5  (GPIO3)
-SQW, 32K  →    nie podłączać
-```
+
+| DS3231 | Raspberry Pi |
+|--------|-------------|
+| VCC    | Pin 1 (3.3V) |
+| GND    | Pin 6 (GND) |
+| SDA    | Pin 3 (GPIO2) |
+| SCL    | Pin 5 (GPIO3) |
+| SQW, 32K | nie podłączać |
+
+---
 
 ### Konfiguracja
 
-**1. Włącz I2C:**
+#### 1. Włącz I2C
+
 ```bash
 sudo raspi-config
 # Interface Options → I2C → Yes
 ```
 
-**2. Dodaj overlay DS3231:**
+#### 2. Dodaj overlay DS3231
+
 ```bash
 echo "dtoverlay=i2c-rtc,ds3231" | sudo tee -a /boot/firmware/config.txt
 sudo reboot
 ```
 
-**3. Sprawdź czy RTC jest widoczny:**
+#### 3. Sprawdź czy RTC jest widoczny
+
 ```bash
 ls /dev/rtc0
 cat /sys/class/rtc/rtc0/name  # powinno pokazać: rtc-ds1307 1-0068
 ```
 
-**4. Zezwól na sudo python3 bez hasła**
+#### 4. Ustaw strefę czasową
 
-Wymagane żeby synchronizacja RTC działała automatycznie bez pytania o hasło:
+```bash
+sudo timedatectl set-timezone Europe/Warsaw
+```
+
+Weryfikacja:
+
+```bash
+timedatectl
+# Time zone: Europe/Warsaw (CEST, +0200)
+```
+
+> **Uwaga:** RTC zawsze przechowuje czas w UTC — to prawidłowe działanie. System automatycznie przelicza na czas lokalny na podstawie ustawionej strefy. Nie zapisuj czasu lokalnego do RTC.
+
+#### 5. Zezwól na sudo python3 bez hasła
+
+Wymagane żeby usługa synchronizacji działała automatycznie przy starcie:
 
 ```bash
 sudo visudo
 ```
 
-Dopisz na **końcu** pliku (zamień `admin` na swoją nazwę użytkownika jeśli inna):
+Dopisz na końcu pliku (zamień `admin` na swoją nazwę użytkownika jeśli inna):
 
 ```
 admin ALL=(ALL) NOPASSWD: /usr/bin/python3
@@ -200,9 +275,25 @@ admin ALL=(ALL) NOPASSWD: /usr/bin/python3
 
 Zapisz przez `Ctrl+X`, `Y`, `Enter`.
 
+---
+
+### Synchronizacja czasu z Maca na Pi (gdy jest dostęp do sieci)
+
+Gdy Pi jest podłączone do sieci lokalnej, uruchom ten skrypt na Macu żeby przesłać aktualny czas na Pi:
+
+```bash
+./sync_time.sh
+```
+
+Skrypt łączy się przez SSH, ustawia czas systemowy, a następnie zapisuje go do RTC żeby przetrwał restart.
+
+> Uruchamiaj za każdym razem gdy podłączasz Pi do sieci, żeby utrzymać dokładny czas w RTC.
+
+---
+
 ### Zapis czasu systemowego do RTC
 
-Uruchom po ustawieniu poprawnego czasu systemowego:
+Uruchom po ustawieniu poprawnego czasu systemowego (np. po uruchomieniu `sync_time.sh`):
 
 ```bash
 sudo python3 - << 'PYEOF'
@@ -218,7 +309,11 @@ print("Zapisano czas do RTC")
 PYEOF
 ```
 
+---
+
 ### Odczyt z RTC i ustawienie czasu systemowego
+
+Uruchom ręcznie do weryfikacji, lub użyj usługi systemd poniżej do automatycznej synchronizacji przy starcie:
 
 ```bash
 sudo python3 - << 'PYEOF'
@@ -234,9 +329,15 @@ subprocess.run(["date", "-u", "-s", t])
 PYEOF
 ```
 
+---
+
 ### Automatyczna synchronizacja przy starcie (systemd)
 
 Utwórz `/etc/systemd/system/rtc-sync.service`:
+
+```bash
+sudo nano /etc/systemd/system/rtc-sync.service
+```
 
 ```ini
 [Unit]
@@ -260,16 +361,20 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ```
 
-Włącz:
+Włącz i uruchom:
+
 ```bash
 sudo systemctl enable rtc-sync
 sudo systemctl start rtc-sync
 ```
 
+---
+
 ### Weryfikacja
 
 ```bash
-cat /sys/class/rtc/rtc0/time   # czas UTC w RTC
-cat /sys/class/rtc/rtc0/date   # data w RTC
-date                            # czas systemowy (lokalny)
+cat /sys/class/rtc/rtc0/time   # czas UTC zapisany w RTC
+cat /sys/class/rtc/rtc0/date   # data zapisana w RTC
+date                            # czas systemowy (przeliczony na lokalny)
+timedatectl                     # pełny przegląd stanu czasu
 ```
