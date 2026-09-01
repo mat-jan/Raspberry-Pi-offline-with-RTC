@@ -143,7 +143,32 @@ PYEOF
 
 ### Auto-sync on boot (systemd)
 
-Create `/etc/systemd/system/rtc-sync.service`:
+Systemd does not handle multi-line Python in `ExecStart` well (quoting issues). Use a separate script file instead.
+
+#### 1. Create the sync script
+
+```bash
+sudo nano /usr/local/bin/rtc-sync.py
+```
+
+```python
+#!/usr/bin/env python3
+import fcntl, struct, subprocess
+
+RTC_RD_TIME = 0x80247009
+with open("/dev/rtc0", "rb") as f:
+    buf = bytearray(32)
+    fcntl.ioctl(f, RTC_RD_TIME, buf)
+s, m, h, d, mo, y = struct.unpack_from("6i", buf)
+t = f"{1900+y}-{mo+1:02d}-{d:02d} {h:02d}:{m:02d}:{s:02d}"
+subprocess.run(["date", "-u", "-s", t])
+```
+
+```bash
+sudo chmod +x /usr/local/bin/rtc-sync.py
+```
+
+#### 2. Create the service
 
 ```bash
 sudo nano /etc/systemd/system/rtc-sync.service
@@ -156,26 +181,25 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 -c "
-import fcntl, struct, subprocess
-RTC_RD_TIME = 0x80247009
-with open(\"/dev/rtc0\",\"rb\") as f:
-    buf=bytearray(32); fcntl.ioctl(f,RTC_RD_TIME,buf)
-s,m,h,d,mo,y=struct.unpack_from(\"6i\",buf)
-t=f\"{1900+y}-{mo+1:02d}-{d:02d} {h:02d}:{m:02d}:{s:02d}\"
-subprocess.run([\"date\",\"-u\",\"-s\",t])
-"
+ExecStart=/usr/bin/python3 /usr/local/bin/rtc-sync.py
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Enable and start:
+#### 3. Enable and start
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable rtc-sync
 sudo systemctl start rtc-sync
+```
+
+Verify — should show `active (exited)`:
+
+```bash
+sudo systemctl status rtc-sync
 ```
 
 ---
